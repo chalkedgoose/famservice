@@ -1,32 +1,41 @@
-/**
- * Some predefined delays (in milliseconds).
- */
-export enum Delays {
-  Short = 500,
-  Medium = 2000,
-  Long = 5000,
-}
+import { GraphQLServer, PubSub } from 'graphql-yoga';
 
-/**
- * Returns a Promise<string> that resolves after given time.
- *
- * @param {string} name - A name.
- * @param {number=} [delay=Delays.Medium] - Number of milliseconds to delay resolution of the Promise.
- * @returns {Promise<string>}
- */
-function delayedHello(
-  name: string,
-  delay: number = Delays.Medium,
-): Promise<string> {
-  return new Promise((resolve: (value?: string) => void) =>
-    setTimeout(() => resolve(`Hello, ${name}`), delay),
-  );
-}
+const typeDefs = `
+  type Query {
+    hello(name: String): String!
+  }
 
-// Below are examples of using ESLint errors suppression
-// Here it is suppressing missing return type definitions for greeter function
+  type Counter {
+    count: Int!
+    countStr: String
+  }
+  type Subscription {
+    counter: Counter!
+  }
+`;
 
-// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-export async function greeter(name: string) {
-  return await delayedHello(name, Delays.Long);
-}
+const resolvers = {
+  Query: {
+    hello: (_, { name }) => `Hello ${name || 'World'}`,
+  },
+  Counter: {
+    countStr: (counter) => `Current count: ${counter.count}`,
+  },
+  Subscription: {
+    counter: {
+      subscribe: (_parent, _args, { pubsub }) => {
+        const channel = Math.random().toString(36).substring(2, 15); // random channel name
+        let count = 0;
+        setInterval(
+          () => pubsub.publish(channel, { counter: { count: count++ } }),
+          2000,
+        );
+        return pubsub.asyncIterator(channel);
+      },
+    },
+  },
+};
+
+const pubsub = new PubSub();
+const server = new GraphQLServer({ typeDefs, resolvers, context: { pubsub } });
+server.start(() => console.log('Server is running on localhost:4000'));
